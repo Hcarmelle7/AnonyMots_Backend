@@ -1,0 +1,18 @@
+# Dépendances Node.js (les installer via npm install)
+node_modules/
+
+# Base de données SQLite locale (contient les données de test locales)
+anonymots.db
+
+# Variables d'environnement locales
+.env
+
+# Fichiers logs du serveur
+*.log
+npm-debug.log*
+
+# Fichiers système et IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
