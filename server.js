@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,87 +43,92 @@ const db = new sqlite3.Database('./anonymots.db', (err) => {
 
 // Initialisation des tables
 function initializeDatabase() {
-  // Table des utilisateurs
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  db.serialize(() => {
+    // Table des utilisateurs
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+      if (err) console.error('Erreur creation table users:', err.message);
+    });
 
-  // Table des messages
-  db.run(`CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    recipient_username TEXT NOT NULL,
-    content TEXT NOT NULL,
-    has_clue BOOLEAN DEFAULT FALSE,
-    clue TEXT,
-    is_guessed BOOLEAN DEFAULT FALSE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (recipient_username) REFERENCES users (username)
-  )`);
+    // Table des messages
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipient_username TEXT NOT NULL,
+      content TEXT NOT NULL,
+      has_clue BOOLEAN DEFAULT FALSE,
+      clue TEXT,
+      is_guessed BOOLEAN DEFAULT FALSE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (recipient_username) REFERENCES users (username)
+    )`, (err) => {
+      if (err) console.error('Erreur creation table messages:', err.message);
+    });
 
-  // Table des messages bienveillants
-  db.run(`CREATE TABLE IF NOT EXISTS wellness_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content TEXT NOT NULL,
-    category TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+    // Suppression des tables statiques avant création pour éviter les doublons au redémarrage
+    db.run("DROP TABLE IF EXISTS wellness_messages", (err) => {
+      if (err) console.error('Erreur DROP wellness_messages:', err.message);
+    });
+    db.run("DROP TABLE IF EXISTS quiz_results", (err) => {
+      if (err) console.error('Erreur DROP quiz_results:', err.message);
+    });
 
-  // Table des résultats de quiz
-  db.run(`CREATE TABLE IF NOT EXISTS quiz_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    mood_type TEXT NOT NULL,
-    personalized_message TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+    // Table des messages bienveillants
+    db.run(`CREATE TABLE IF NOT EXISTS wellness_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+      if (err) console.error('Erreur creation table wellness_messages:', err.message);
+    });
 
-  // Insertion des données de base
-  insertInitialData();
+    // Table des résultats de quiz
+    db.run(`CREATE TABLE IF NOT EXISTS quiz_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mood_type TEXT NOT NULL,
+      personalized_message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+      if (err) console.error('Erreur creation table quiz_results:', err.message);
+    });
+
+    // Insertion des données de base
+    insertInitialData();
+  });
 }
 
-// Insertion des données initiales
+// Insertion des données initiales depuis les fichiers JSON
 function insertInitialData() {
-  // Attendre que les tables soient créées avant d'insérer les données
-  setTimeout(() => {
-    // Messages bienveillants
-    const wellnessMessages = [
-      { content: "Vous êtes plus fort que vous ne le pensez. Chaque défi que vous surmontez vous rend plus résilient.", category: "motivation" },
-      { content: "Prenez le temps de respirer profondément. Vous méritez la paix et la sérénité.", category: "relaxation" },
-      { content: "Votre présence dans ce monde fait une différence. Vous comptez plus que vous ne l'imaginez.", category: "encouragement" },
-      { content: "Il est normal de ne pas aller bien parfois. Soyez doux avec vous-même.", category: "compassion" },
-      { content: "Chaque petit pas compte. Vous progressez, même si cela ne se voit pas toujours.", category: "motivation" },
-      { content: "Vous avez survécu à 100% de vos mauvais jours jusqu'à présent. C'est un excellent score.", category: "encouragement" },
-      { content: "Votre valeur ne dépend pas de votre productivité. Vous êtes précieux tel que vous êtes.", category: "compassion" },
-      { content: "Les tempêtes passent toujours. Le soleil brillera à nouveau dans votre vie.", category: "espoir" }
-    ];
+  try {
+    // 1. Chargement et insertion des messages bienveillants
+    const wellnessMessagesPath = path.join(__dirname, 'data', 'wellness_messages.json');
+    const wellnessMessages = JSON.parse(fs.readFileSync(wellnessMessagesPath, 'utf8'));
 
     wellnessMessages.forEach(msg => {
-      db.run(`INSERT OR IGNORE INTO wellness_messages (content, category) VALUES (?, ?)`, 
+      db.run(`INSERT INTO wellness_messages (content, category) VALUES (?, ?)`, 
              [msg.content, msg.category], (err) => {
         if (err) console.log('Erreur insertion wellness:', err.message);
       });
     });
 
-    // Messages personnalisés pour le quiz
-    const quizResults = [
-      { mood_type: "triste", personalized_message: "Je comprends que vous traversez une période difficile. Rappelez-vous que la tristesse est temporaire et que vous avez la force de surmonter cela. Vous n'êtes pas seul(e)." },
-      { mood_type: "stresse", personalized_message: "Le stress peut être accablant, mais vous avez déjà surmonté des défis par le passé. Prenez une pause, respirez profondément, et rappelez-vous que vous êtes capable." },
-      { mood_type: "anxieux", personalized_message: "L'anxiété peut sembler insurmontable, mais elle ne définit pas qui vous êtes. Concentrez-vous sur le moment présent et rappelez-vous que vous êtes en sécurité." },
-      { mood_type: "fatigue", personalized_message: "Il est important d'écouter votre corps et votre esprit. Accordez-vous le repos que vous méritez. Vous n'avez pas besoin d'être productif en permanence." },
-      { mood_type: "heureux", personalized_message: "Votre joie est contagieuse ! Profitez de ce moment de bonheur et n'hésitez pas à le partager avec les autres. Vous illuminez le monde autour de vous." },
-      { mood_type: "confiant", personalized_message: "Votre confiance en vous est inspirante ! Continuez à croire en vos capacités et n'hésitez pas à poursuivre vos rêves. Vous avez tout ce qu'il faut pour réussir." }
-    ];
+    // 2. Chargement et insertion des résultats de quiz
+    const quizResultsPath = path.join(__dirname, 'data', 'quiz_results.json');
+    const quizResults = JSON.parse(fs.readFileSync(quizResultsPath, 'utf8'));
 
     quizResults.forEach(result => {
-      db.run(`INSERT OR IGNORE INTO quiz_results (mood_type, personalized_message) VALUES (?, ?)`, 
+      db.run(`INSERT INTO quiz_results (mood_type, personalized_message) VALUES (?, ?)`, 
              [result.mood_type, result.personalized_message], (err) => {
         if (err) console.log('Erreur insertion quiz:', err.message);
       });
     });
     
-    console.log('Données initiales insérées avec succès.');
-  }, 1000);
+    console.log(`Données initiales insérées avec succès (${wellnessMessages.length} citations, ${quizResults.length} humeurs).`);
+  } catch (err) {
+    console.error('Erreur lors du chargement des fichiers de données de base:', err.message);
+  }
 }
 
 // Routes API

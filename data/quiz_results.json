@@ -1,0 +1,8 @@
+[
+  { "mood_type": "triste", "personalized_message": "Je comprends que tu traverses une période difficile. Rappelle-toi que la tristesse est temporaire et que tu as la force de surmonter cela. Sois doux avec toi-même, tu n'es pas seul(e)." },
+  { "mood_type": "stresse", "personalized_message": "Le stress peut être accablant, mais tu as déjà surmonté des défis par le passé. Prends une pause, respirez profondément, et rappelle-toi que tu fais de ton mieux." },
+  { "mood_type": "anxieux", "personalized_message": "L'anxiété peut sembler insurmontable, mais elle ne définit pas qui tu es. Concentre-toi sur le moment présent, pose tes épaules, respire calmement. Tu es en sécurité." },
+  { "mood_type": "fatigue", "personalized_message": "Il est important d'écouter ton corps et ton esprit. Accordes-toi le droit de te reposer et de ne rien faire. Ta valeur ne dépend pas de ta productivité." },
+  { "mood_type": "heureux", "personalized_message": "Ta joie est magnifique et précieuse ! Profite pleinement de ce moment de bonheur, savoure-le et n'hésite pas à le partager autour de toi. Tu illumines la journée." },
+  { "mood_type": "confiant", "personalized_message": "Ta confiance en toi est inspirante ! Continue de croire en tes capacités, poursuis tes projets avec passion. Tu as tout ce qu'il faut pour réussir." }
+]
