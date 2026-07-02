@@ -8,6 +8,28 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 
+// Chargement de la liste de mots malveillants pour la modération
+const blockedWordsPath = path.join(__dirname, 'data', 'blocked_words.json');
+const BLOCKED_WORDS = JSON.parse(fs.readFileSync(blockedWordsPath, 'utf8'));
+
+/**
+ * Vérifie si un texte contient des mots/expressions malveillants.
+ * @param {string} text - Le contenu du message à vérifier
+ * @returns {boolean} true si le message est malveillant
+ */
+function isMalicious(text) {
+  const normalized = text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // supprimer les accents
+    .replace(/[^a-z0-9\s]/g, ' ');                   // garder uniquement lettres, chiffres, espaces
+  
+  return BLOCKED_WORDS.some(word => {
+    const normalizedWord = word.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ');
+    return normalized.includes(normalizedWord);
+  });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -60,11 +82,25 @@ function initializeDatabase() {
       content TEXT NOT NULL,
       has_clue BOOLEAN DEFAULT FALSE,
       clue TEXT,
+      sender_name TEXT,
       is_guessed BOOLEAN DEFAULT FALSE,
+      is_blocked BOOLEAN DEFAULT FALSE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (recipient_username) REFERENCES users (username)
     )`, (err) => {
       if (err) console.error('Erreur creation table messages:', err.message);
+    });
+
+    // Migrations : ajouter les nouvelles colonnes si la table existe déjà
+    db.run(`ALTER TABLE messages ADD COLUMN sender_name TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Erreur migration sender_name:', err.message);
+      }
+    });
+    db.run(`ALTER TABLE messages ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Erreur migration is_blocked:', err.message);
+      }
     });
 
     // Suppression des tables statiques avant création pour éviter les doublons au redémarrage
@@ -178,7 +214,7 @@ app.get('/api/users/:username', (req, res) => {
 
 // Envoyer un message
 app.post('/api/messages', (req, res) => {
-  const { recipient, content, hasClue, clue } = req.body;
+  const { recipient, content, hasClue, clue, senderName } = req.body;
   
   if (!recipient || !content) {
     return res.status(400).json({ error: 'Le destinataire et le contenu sont requis' });
@@ -186,6 +222,18 @@ app.post('/api/messages', (req, res) => {
 
   if (content.length > 500) {
     return res.status(400).json({ error: 'Le message ne peut pas dépasser 500 caractères' });
+  }
+
+  // En mode gaming, le prénom secret est obligatoire
+  if (hasClue && (!senderName || senderName.trim().length === 0)) {
+    return res.status(400).json({ error: 'Le prénom secret est obligatoire en mode gaming.' });
+  }
+
+  // Modération silencieuse : vérifier si le message est malveillant
+  const blocked = isMalicious(content) || (clue && isMalicious(clue));
+  if (blocked) {
+    // On log en interne mais on répond comme si l'envoi était réussi (silencieux)
+    console.warn(`[MODERATION] Message bloqué pour ${recipient} : "${content.substring(0, 60)}..."`);
   }
 
   // Vérifier que l'utilisateur destinataire existe
@@ -198,9 +246,9 @@ app.post('/api/messages', (req, res) => {
       return res.status(404).json({ error: 'Utilisateur destinataire non trouvé' });
     }
 
-    // Insérer le message
-    db.run(`INSERT INTO messages (recipient_username, content, has_clue, clue) VALUES (?, ?, ?, ?)`, 
-           [recipient.toLowerCase(), content, hasClue || false, clue || null], function(err) {
+    // Insérer le message — is_blocked marque les messages malveillants (invisibles pour le destinataire)
+    db.run(`INSERT INTO messages (recipient_username, content, has_clue, clue, sender_name, is_blocked) VALUES (?, ?, ?, ?, ?, ?)`, 
+           [recipient.toLowerCase(), content, hasClue || false, clue || null, hasClue ? senderName.trim().toLowerCase() : null, blocked ? 1 : 0], function(err) {
       if (err) {
         return res.status(500).json({ error: 'Erreur lors de l\'envoi du message' });
       }
@@ -214,10 +262,12 @@ app.post('/api/messages', (req, res) => {
 });
 
 // Récupérer les messages d'un utilisateur
+// IMPORTANT : on n'envoie jamais sender_name ni is_blocked dans la réponse pour préserver le jeu
 app.get('/api/messages/:username', (req, res) => {
   const { username } = req.params;
   
-  db.all(`SELECT * FROM messages WHERE recipient_username = ? ORDER BY created_at DESC`, 
+  // Les messages bloqués (malveillants) sont filtrés silencieusement
+  db.all(`SELECT id, recipient_username, content, has_clue, clue, is_guessed, created_at FROM messages WHERE recipient_username = ? AND (is_blocked = FALSE OR is_blocked IS NULL) ORDER BY created_at DESC`, 
          [username.toLowerCase()], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: 'Erreur lors de la récupération des messages' });
@@ -279,20 +329,46 @@ app.post('/api/quiz', (req, res) => {
   });
 });
 
-// Marquer un message comme deviné (pour le gaming)
+// Tenter de deviner l'expéditeur en mode gaming
+// Le corps de la requête doit contenir { guess: "prenom" }
 app.put('/api/messages/:id/guess', (req, res) => {
   const { id } = req.params;
-  
-  db.run(`UPDATE messages SET is_guessed = TRUE WHERE id = ? AND has_clue = TRUE`, [id], function(err) {
+  const { guess } = req.body;
+
+  if (!guess || guess.trim().length === 0) {
+    return res.status(400).json({ error: 'Il faut saisir un prénom pour deviner.' });
+  }
+
+  // Récupérer le message avec le sender_name secret
+  db.get(`SELECT id, sender_name, is_guessed, has_clue FROM messages WHERE id = ? AND has_clue = TRUE`, [id], (err, msg) => {
     if (err) {
-      return res.status(500).json({ error: 'Erreur lors de la mise à jour du message' });
+      return res.status(500).json({ error: 'Erreur lors de la récupération du message' });
     }
     
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Message non trouvé ou sans indice' });
+    if (!msg) {
+      return res.status(404).json({ error: 'Message non trouvé ou sans mode gaming actif.' });
     }
-    
-    res.json({ message: 'Message marqué comme deviné', points: 10 });
+
+    if (msg.is_guessed) {
+      return res.status(409).json({ error: 'Ce message a déjà été deviné !' });
+    }
+
+    const normalizedGuess = guess.trim().toLowerCase();
+    const normalizedSenderName = (msg.sender_name || '').trim().toLowerCase();
+
+    if (normalizedGuess !== normalizedSenderName) {
+      // Mauvaise réponse — on ne révèle pas le nom
+      return res.status(200).json({ success: false, message: 'Ce n\'est pas le bon prénom. Réessaie !' });
+    }
+
+    // Bonne réponse → marquer comme deviné
+    db.run(`UPDATE messages SET is_guessed = TRUE WHERE id = ?`, [id], function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Erreur lors de la mise à jour du message' });
+      }
+      
+      res.json({ success: true, message: 'Bravo ! Tu as trouvé !', points: 10 });
+    });
   });
 });
 
