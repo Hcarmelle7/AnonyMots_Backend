@@ -262,12 +262,15 @@ app.post('/api/messages', (req, res) => {
 });
 
 // Récupérer les messages d'un utilisateur
-// IMPORTANT : on n'envoie jamais sender_name ni is_blocked dans la réponse pour préserver le jeu
+// Le prénom de l'expéditeur (sender_name) n'est renvoyé que s'il a été correctement deviné
 app.get('/api/messages/:username', (req, res) => {
   const { username } = req.params;
   
-  // Les messages bloqués (malveillants) sont filtrés silencieusement
-  db.all(`SELECT id, recipient_username, content, has_clue, clue, is_guessed, created_at FROM messages WHERE recipient_username = ? AND (is_blocked = FALSE OR is_blocked IS NULL) ORDER BY created_at DESC`, 
+  db.all(`SELECT id, recipient_username, content, has_clue, clue, is_guessed, created_at, 
+          CASE WHEN is_guessed = 1 THEN sender_name ELSE NULL END AS sender_name 
+          FROM messages 
+          WHERE recipient_username = ? AND (is_blocked = FALSE OR is_blocked IS NULL) 
+          ORDER BY created_at DESC`, 
          [username.toLowerCase()], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: 'Erreur lors de la récupération des messages' });
@@ -367,7 +370,12 @@ app.put('/api/messages/:id/guess', (req, res) => {
         return res.status(500).json({ error: 'Erreur lors de la mise à jour du message' });
       }
       
-      res.json({ success: true, message: 'Bravo ! Tu as trouvé !', points: 10 });
+      res.json({ 
+        success: true, 
+        message: 'Bravo ! Tu as trouvé !', 
+        points: 10,
+        senderName: msg.sender_name
+      });
     });
   });
 });
