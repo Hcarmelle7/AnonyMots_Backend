@@ -262,7 +262,7 @@ app.post('/api/messages', (req, res) => {
 });
 
 // Récupérer les messages d'un utilisateur
-// Le prénom secret (sender_name) n'est renvoyé que s'il a déjà été deviné, pour éviter toute triche
+// IMPORTANT : on n'envoie jamais sender_name (sauf si deviné) ni is_blocked dans la réponse pour préserver le jeu
 app.get('/api/messages/:username', (req, res) => {
   const { username } = req.params;
   
@@ -367,7 +367,7 @@ app.put('/api/messages/:id/guess', (req, res) => {
         return res.status(500).json({ error: 'Erreur lors de la mise à jour du message' });
       }
       
-      res.json({ success: true, message: 'Bravo ! Tu as trouvé !', points: 10 });
+      res.json({ success: true, message: 'Bravo ! Tu as trouvé !', points: 10, senderName: msg.sender_name });
     });
   });
 });
