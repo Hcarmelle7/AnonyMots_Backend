@@ -54,7 +54,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.ok(res.body.link);
   });
 
-  test('POST /api/users - Return conflict on duplicate user', async () => {
+  test('POST /api/users - Handle duplicate usernames by appending a random suffix', async () => {
     // Create first
     await request(app)
       .post('/api/users')
@@ -65,9 +65,35 @@ test.describe('AnonyMots Backend API Tests', () => {
     const res = await request(app)
       .post('/api/users')
       .send({ username: testUsername })
-      .expect(409);
+      .expect(201);
 
-    assert.strictEqual(res.body.error, "Ce nom d'utilisateur existe déjà");
+    assert.ok(res.body.username !== testUsername);
+    assert.match(res.body.username, /^test_user_for_c_[0-9]{4}$/);
+  });
+
+  test('POST /api/users - Reject invalid username format', async () => {
+    // Too short
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'ab' })
+      .expect(400);
+
+    // Too long (21 chars)
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'a'.repeat(21) })
+      .expect(400);
+
+    // Invalid characters
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'hello/world' })
+      .expect(400);
+      
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'marie?' })
+      .expect(400);
   });
 
   test('GET /api/users/:username - Retrieve existing user', async () => {
