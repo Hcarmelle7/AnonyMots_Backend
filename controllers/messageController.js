@@ -112,6 +112,15 @@ const MessageController = {
         return res.status(404).json({ error: 'Message non trouvé ou sans mode gaming actif.' });
       }
 
+      // Protection brute-force : maximum 3 tentatives par message
+      // (On lit guess_attempts depuis la ligne récupérée en DB)
+      if (msg.guess_attempts >= 3) {
+        return res.status(400).json({ 
+          error: 'Tentatives épuisées', 
+          message: 'Tu as dépassé la limite de 3 tentatives pour ce message !' 
+        });
+      }
+
       if (msg.is_guessed) {
         return res.status(409).json({ error: 'Ce message a déjà été deviné !' });
       }
@@ -120,8 +129,19 @@ const MessageController = {
       const normalizedSenderName = (msg.sender_name || '').trim().toLowerCase();
 
       if (normalizedGuess !== normalizedSenderName) {
-        // Mauvaise réponse — on ne révèle pas le nom
-        return res.status(200).json({ success: false, message: 'Ce n\'est pas le bon prénom. Réessaie !' });
+        // Mauvaise réponse — incrémenter le compteur de tentatives en base
+        MessageModel.incrementGuessAttempts(id, (err) => {
+          if (err) {
+            console.error(`[DB ERROR] Erreur incrémentation tentative pour message ${id}:`, err.message);
+          }
+        });
+
+        const attemptsLeft = 3 - (msg.guess_attempts + 1);
+        const warningMessage = attemptsLeft > 0 
+          ? `Ce n'est pas le bon prénom. Il te reste ${attemptsLeft} tentative(s) !`
+          : `Ce n'est pas le bon prénom. Tu as épuisé tes 3 tentatives !`;
+
+        return res.status(200).json({ success: false, message: warningMessage });
       }
 
       // Bonne réponse → marquer comme deviné

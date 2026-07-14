@@ -39,17 +39,27 @@ const MessageModel = {
     );
   },
 
-  /**
-   * Récupère un message par son identifiant pour le jeu de devinette.
-   * @param {number|string} id - Identifiant du message
-   * @param {function} callback - Callback (err, row)
-   */
   getByIdAndGaming: (id, callback) => {
     db.get(
-      `SELECT id, sender_name, is_guessed, has_clue FROM messages WHERE id = ? AND has_clue = TRUE`, 
+      `SELECT id, sender_name, is_guessed, has_clue, guess_attempts FROM messages WHERE id = ? AND has_clue = TRUE`, 
       [id], 
       (err, row) => {
         callback(err, row);
+      }
+    );
+  },
+
+  /**
+   * Incrémente le nombre de tentatives de devinette d'un message.
+   * @param {number|string} id - Identifiant du message
+   * @param {function} callback - Callback (err)
+   */
+  incrementGuessAttempts: (id, callback) => {
+    db.run(
+      `UPDATE messages SET guess_attempts = guess_attempts + 1 WHERE id = ?`,
+      [id],
+      function(err) {
+        callback(err);
       }
     );
   },
