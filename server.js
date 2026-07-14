@@ -46,10 +46,12 @@ app.use((req, res) => {
 });
 
 // Démarrage du serveur web
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Serveur AnonyMots démarré sur le port ${PORT}`);
-  console.log(`API disponible sur http://localhost:${PORT}/api`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Serveur AnonyMots démarré sur le port ${PORT}`);
+    console.log(`API disponible sur http://localhost:${PORT}/api`);
+  });
+}
 
 // Gestion propre de l'arrêt du processus (Fermeture SQLite)
 process.on('SIGINT', () => {
@@ -62,3 +64,5 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+module.exports = app;
