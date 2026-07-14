@@ -53,16 +53,23 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-// Gestion propre de l'arrêt du processus (Fermeture SQLite)
-process.on('SIGINT', () => {
-  console.log('Arrêt du serveur...');
+// Fonction de fermeture propre de la base de données et du processus
+const handleGracefulShutdown = () => {
+  console.log('Arrêt du serveur en cours...');
+  // On ferme la connexion SQLite pour s'assurer que toutes les écritures en attente sont terminées
   db.close((err) => {
     if (err) {
-      console.error(err.message);
+      console.error('Erreur lors de la fermeture de la base de données:', err.message);
     }
-    console.log('Connexion à la base de données fermée.');
+    console.log('Connexion à la base de données SQLite fermée de manière sécurisée.');
     process.exit(0);
   });
-});
+};
+
+// SIGINT est déclenché par Ctrl+C en local dans la console.
+process.on('SIGINT', handleGracefulShutdown);
+
+// SIGTERM est déclenché par les gestionnaires de processus (PM2, Docker, Heroku, etc.) lors de l'extinction.
+process.on('SIGTERM', handleGracefulShutdown);
 
 module.exports = app;
