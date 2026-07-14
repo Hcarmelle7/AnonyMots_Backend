@@ -183,6 +183,38 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.strictEqual(getRes.body[0].content, 'Je vais annuler ma réunion pour faire un update.');
   });
 
+  test('POST /api/messages - Reject gaming inputs that exceed size limits', async () => {
+    // Create recipient
+    await request(app)
+      .post('/api/users')
+      .send({ username: testUsername })
+      .expect(201);
+
+    // 1. Indice trop long (101 caractères)
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Devine qui je suis !',
+        hasClue: true,
+        clue: 'a'.repeat(101),
+        senderName: 'Martin'
+      })
+      .expect(400);
+
+    // 2. Prénom secret trop long (31 caractères)
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Devine qui je suis !',
+        hasClue: true,
+        clue: 'Je porte des lunettes',
+        senderName: 'm'.repeat(31)
+      })
+      .expect(400);
+  });
+
   test('PUT /api/messages/:id/guess - Gaming mode guess sender', async () => {
     // Create recipient
     await request(app)

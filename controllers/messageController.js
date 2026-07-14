@@ -26,6 +26,16 @@ const MessageController = {
       return res.status(400).json({ error: 'Le prénom secret est obligatoire en mode gaming.' });
     }
 
+    // Étape 2 : Limitation de taille sur les champs Gaming (sécurité stockage)
+    if (hasClue) {
+      if (clue && clue.length > 100) {
+        return res.status(400).json({ error: "L'indice ne peut pas dépasser 100 caractères." });
+      }
+      if (senderName && senderName.trim().length > 30) {
+        return res.status(400).json({ error: "Le prénom secret ne peut pas dépasser 30 caractères." });
+      }
+    }
+
     // Modération silencieuse : vérifier si le message est malveillant
     const blocked = isMalicious(content) || (clue && isMalicious(clue));
     if (blocked) {
