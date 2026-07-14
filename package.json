@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/api.test.js"
   },
   "keywords": [],
   "author": "",
@@ -19,5 +19,8 @@
     "helmet": "^8.1.0",
     "sqlite3": "^6.0.1",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
   }
 }
