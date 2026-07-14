@@ -119,6 +119,44 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.strictEqual(getRes.body[0].has_clue, 0); // SQLite stores boolean as 0/1
   });
 
+  test('Moderation - Block isolated bad words but allow words containing them (Scunthorpe problem)', async () => {
+    // Create recipient
+    await request(app)
+      .post('/api/users')
+      .send({ username: testUsername })
+      .expect(201);
+
+    // 1. Envoi d'un message bienveillant contenant un mot interdit en sous-partie (ex: "annuler" contient "nul", "update" contient "pd")
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Je vais annuler ma réunion pour faire un update.',
+        hasClue: false
+      })
+      .expect(201);
+
+    // 2. Envoi d'un message malveillant avec un mot interdit isolé (ex: "nul")
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Tu es nul !',
+        hasClue: false
+      })
+      .expect(201); // La modération est silencieuse, renvoie quand même 201
+
+    // Récupération des messages
+    const getRes = await request(app)
+      .get(`/api/messages/${testUsername}`)
+      .expect(200);
+
+    // Seul le message bienveillant doit être retourné (is_blocked = 0)
+    // Le message malveillant doit être masqué (is_blocked = 1)
+    assert.strictEqual(getRes.body.length, 1);
+    assert.strictEqual(getRes.body[0].content, 'Je vais annuler ma réunion pour faire un update.');
+  });
+
   test('PUT /api/messages/:id/guess - Gaming mode guess sender', async () => {
     // Create recipient
     await request(app)
