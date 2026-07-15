@@ -27,17 +27,18 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// 3. Parsing des requêtes
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// 3. Parsing des requêtes (Sécurité : Limite de taille de charge utile à 10 Ko pour éviter les attaques DoS)
+app.use(bodyParser.json({ limit: '10kb' }));
+app.use(bodyParser.urlencoded({ limit: '10kb', extended: true }));
 
 // 4. Utilisation des routes centralisées
 app.use('/api', apiRoutes);
 
-// 5. Gestionnaire global d'erreurs
+// 5. Gestionnaire global d'erreurs (mis à jour pour conserver les codes de statut HTTP des erreurs lancées par Express/middlewares)
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Quelque chose s\'est mal passé!' });
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({ error: err.message || 'Quelque chose s\'est mal passé!' });
 });
 
 // 6. Gestion des routes non trouvées (404)

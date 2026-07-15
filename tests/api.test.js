@@ -336,4 +336,14 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.strictEqual(res.body.mood_type, 'triste');
     assert.ok(res.body.personalized_message);
   });
+
+  test('POST /api/users - Reject payload exceeding 10kb', async () => {
+    // Génère une charge utile d'environ 12 Ko (> 10 Ko)
+    const hugeUsername = 'a'.repeat(12 * 1024);
+
+    await request(app)
+      .post('/api/users')
+      .send({ username: hugeUsername })
+      .expect(413); // Payload Too Large
+  });
 });
