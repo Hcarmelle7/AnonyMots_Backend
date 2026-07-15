@@ -137,6 +137,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     // Retrieve messages
     const getRes = await request(app)
       .get(`/api/messages/${testUsername}`)
+      .set('X-User-Auth', testUsername)
       .expect(200);
 
     assert.ok(Array.isArray(getRes.body));
@@ -175,6 +176,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     // Récupération des messages
     const getRes = await request(app)
       .get(`/api/messages/${testUsername}`)
+      .set('X-User-Auth', testUsername)
       .expect(200);
 
     // Seul le message bienveillant doit être retourné (is_blocked = 0)
@@ -237,6 +239,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     // Retrieve message to get ID
     const getRes = await request(app)
       .get(`/api/messages/${testUsername}`)
+      .set('X-User-Auth', testUsername)
       .expect(200);
 
     const messageId = getRes.body[0].id;
@@ -282,6 +285,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     // Retrieve message to get ID
     const getRes = await request(app)
       .get(`/api/messages/${testUsername}`)
+      .set('X-User-Auth', testUsername)
       .expect(200);
 
     const messageId = getRes.body[0].id;
@@ -345,5 +349,18 @@ test.describe('AnonyMots Backend API Tests', () => {
       .post('/api/users')
       .send({ username: hugeUsername })
       .expect(413); // Payload Too Large
+  });
+
+  test('GET /api/messages/:username - Reject request without valid X-User-Auth header', async () => {
+    // Sans header
+    await request(app)
+      .get(`/api/messages/${testUsername}`)
+      .expect(403);
+
+    // Avec un mauvais header
+    await request(app)
+      .get(`/api/messages/${testUsername}`)
+      .set('X-User-Auth', 'wrong_user_xyz')
+      .expect(403);
   });
 });

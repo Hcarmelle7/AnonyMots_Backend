@@ -19,7 +19,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 2. Limiteur de débit (Rate limiting)
+// 2. Limiteur de débit
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limite chaque IP à 100 requêtes par windowMs

@@ -81,6 +81,12 @@ const MessageController = {
   getByRecipient: (req, res) => {
     const { username } = req.params;
     
+    // Étape 1 : Protection IDOR (Seul le propriétaire du pseudonyme est autorisé à lire ses messages)
+    const requestUser = req.headers['x-user-auth'];
+    if (!requestUser || requestUser.toLowerCase() !== username.toLowerCase()) {
+      return res.status(403).json({ error: 'Accès non autorisé aux messages.' });
+    }
+
     MessageModel.getByRecipient(username.toLowerCase(), (err, rows) => {
       if (err) {
         return res.status(500).json({ error: 'Erreur lors de la récupération des messages' });
