@@ -54,7 +54,7 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.ok(res.body.link);
   });
 
-  test('POST /api/users - Return conflict on duplicate user', async () => {
+  test('POST /api/users - Handle duplicate usernames by appending a random suffix', async () => {
     // Create first
     await request(app)
       .post('/api/users')
@@ -65,9 +65,35 @@ test.describe('AnonyMots Backend API Tests', () => {
     const res = await request(app)
       .post('/api/users')
       .send({ username: testUsername })
-      .expect(409);
+      .expect(201);
 
-    assert.strictEqual(res.body.error, "Ce nom d'utilisateur existe déjà");
+    assert.ok(res.body.username !== testUsername);
+    assert.match(res.body.username, /^test_user_for_c_[0-9]{4}$/);
+  });
+
+  test('POST /api/users - Reject invalid username format', async () => {
+    // Too short
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'ab' })
+      .expect(400);
+
+    // Too long (21 chars)
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'a'.repeat(21) })
+      .expect(400);
+
+    // Invalid characters
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'hello/world' })
+      .expect(400);
+      
+    await request(app)
+      .post('/api/users')
+      .send({ username: 'marie?' })
+      .expect(400);
   });
 
   test('GET /api/users/:username - Retrieve existing user', async () => {
@@ -157,6 +183,38 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.strictEqual(getRes.body[0].content, 'Je vais annuler ma réunion pour faire un update.');
   });
 
+  test('POST /api/messages - Reject gaming inputs that exceed size limits', async () => {
+    // Create recipient
+    await request(app)
+      .post('/api/users')
+      .send({ username: testUsername })
+      .expect(201);
+
+    // 1. Indice trop long (101 caractères)
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Devine qui je suis !',
+        hasClue: true,
+        clue: 'a'.repeat(101),
+        senderName: 'Martin'
+      })
+      .expect(400);
+
+    // 2. Prénom secret trop long (31 caractères)
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Devine qui je suis !',
+        hasClue: true,
+        clue: 'Je porte des lunettes',
+        senderName: 'm'.repeat(31)
+      })
+      .expect(400);
+  });
+
   test('PUT /api/messages/:id/guess - Gaming mode guess sender', async () => {
     // Create recipient
     await request(app)
@@ -200,6 +258,64 @@ test.describe('AnonyMots Backend API Tests', () => {
     assert.strictEqual(rightRes.body.success, true);
     assert.strictEqual(rightRes.body.points, 10);
     assert.strictEqual(rightRes.body.senderName, 'martin');
+  });
+
+  test('PUT /api/messages/:id/guess - Limit guess attempts to 3 and block further guessing', async () => {
+    // Create recipient
+    await request(app)
+      .post('/api/users')
+      .send({ username: testUsername })
+      .expect(201);
+
+    // Send gaming message
+    await request(app)
+      .post('/api/messages')
+      .send({
+        recipient: testUsername,
+        content: 'Devine qui je suis !',
+        hasClue: true,
+        clue: 'Je porte des lunettes',
+        senderName: 'Martin'
+      })
+      .expect(201);
+
+    // Retrieve message to get ID
+    const getRes = await request(app)
+      .get(`/api/messages/${testUsername}`)
+      .expect(200);
+
+    const messageId = getRes.body[0].id;
+
+    // 1ère mauvaise supposition
+    const res1 = await request(app)
+      .put(`/api/messages/${messageId}/guess`)
+      .send({ guess: 'Lucas' })
+      .expect(200);
+    assert.strictEqual(res1.body.success, false);
+    assert.match(res1.body.message, /Il te reste 2 tentative/);
+
+    // 2ème mauvaise supposition
+    const res2 = await request(app)
+      .put(`/api/messages/${messageId}/guess`)
+      .send({ guess: 'Thomas' })
+      .expect(200);
+    assert.strictEqual(res2.body.success, false);
+    assert.match(res2.body.message, /Il te reste 1 tentative/);
+
+    // 3ème mauvaise supposition
+    const res3 = await request(app)
+      .put(`/api/messages/${messageId}/guess`)
+      .send({ guess: 'Julien' })
+      .expect(200);
+    assert.strictEqual(res3.body.success, false);
+    assert.match(res3.body.message, /Tu as épuisé tes 3 tentatives/);
+
+    // 4ème supposition (doit être bloquée)
+    const res4 = await request(app)
+      .put(`/api/messages/${messageId}/guess`)
+      .send({ guess: 'Martin' })
+      .expect(400);
+    assert.strictEqual(res4.body.error, 'Tentatives épuisées');
   });
 
   test('GET /api/wellness-messages - Fetch wellness messages', async () => {

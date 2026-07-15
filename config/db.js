@@ -36,6 +36,7 @@ function initializeDatabase() {
       sender_name TEXT,
       is_guessed BOOLEAN DEFAULT FALSE,
       is_blocked BOOLEAN DEFAULT FALSE,
+      guess_attempts INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (recipient_username) REFERENCES users (username)
     )`, (err) => {
@@ -51,6 +52,11 @@ function initializeDatabase() {
     db.run(`ALTER TABLE messages ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE`, (err) => {
       if (err && !err.message.includes('duplicate column name')) {
         console.error('Erreur migration is_blocked:', err.message);
+      }
+    });
+    db.run(`ALTER TABLE messages ADD COLUMN guess_attempts INTEGER DEFAULT 0`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Erreur migration guess_attempts:', err.message);
       }
     });
 
